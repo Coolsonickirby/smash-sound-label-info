@@ -1,21 +1,21 @@
-//! A Rust library for working with `bgm_property.bin` files from Smash Ultimate. This allows for
+//! A Rust library for working with `soundlabelinfo.sli` files from Smash Ultimate. This allows for
 //! modifying various properties associated with  background music.
 //! 
 /// ```rust
 /// # fn main() -> binread::BinResult<()> {
-/// use bgm_property::BgmPropertyFile;
+/// use sound_label_info::SliFile;
 /// 
-/// let mut file = BgmPropertyFile::open("bgm_property.bin")?;
+/// let mut file = SliFile::open("soundlabelinfo.sli")?;
 /// 
 /// for entry in file.entries() {
-///     println!("name_id: {:#X}", entry.name_id);
+///     println!("tone_name: {:#X}", entry.tone_name);
 /// }
 /// 
 /// for entry in file.entries_mut() {
-///     entry.loop_start_sample = 0;
+///     entry.tone_id = 0;
 /// }
 /// 
-/// file.save("bgm_property_out.bin")?;
+/// file.save("soundlabelinfo_out.sli")?;
 /// # Ok(())
 /// # }
 /// ```
@@ -39,59 +39,55 @@ pub use binread::{BinResult as Result, Error};
 
 /// ```rust
 /// # fn main() -> binread::BinResult<()> {
-/// use bgm_property::BgmPropertyFile;
+/// use sound_label_info::SliFile;
 /// 
-/// let mut file = BgmPropertyFile::open("bgm_property.bin")?;
+/// let mut file = SliFile::open("soundlabelinfo.sli")?;
 /// 
 /// for entry in file.entries() {
-///     println!("name_id: {:#X}", entry.name_id);
+///     println!("tone_name: {:#X}", entry.tone_name);
 /// }
 /// 
 /// for entry in file.entries_mut() {
-///     entry.loop_start_sample = 0;
+///     entry.tone_id = 0;
 /// }
 /// 
-/// file.save("bgm_property_out.bin")?;
+/// file.save("soundlabelinfo.sli")?;
 /// # Ok(())
 /// # }
 /// ```
 #[derive_binread]
 #[cfg_attr(feature = "derive_serde", derive(Serialize, Deserialize))]
 #[derive(Debug)]
-#[br(magic = b"PMGB")]
-pub struct BgmPropertyFile (
+#[br(magic = b"SLI\x00")]
+pub struct SliFile (
+    u32,
+    
     #[br(temp)]
     u32,
 
-    #[br(count = self_0)]
+    #[br(count = self_1)]
     Vec<Entry>,
 );
 
-impl BinWrite for BgmPropertyFile {
+impl BinWrite for SliFile {
     fn write_options<W: Write>(&self, writer: &mut W, options: &WriterOption) -> io::Result<()> {
         (
-            "PMGB",
-            self.0.len() as u32,
-            &self.0
+            "SLI\x00",
+            self.0,
+            self.1.len() as u32,
+            &self.1
         ).write_options(writer, options)
     }
 }
 
-/// An entry representing a single nus3audio background music file
+/// An entry representing a single tone
 #[cfg_attr(feature = "derive_serde", derive(Serialize, Deserialize))]
 #[derive(BinRead, BinWrite, Debug)]
 pub struct Entry {
     #[serde(with = "serde_hash40")]
-    pub name_id: Hash40,
-    pub unk: u32,
-    pub loop_start_sample: u32,
-    pub unk_sample: u32,
-    pub loop_end_sample: u32,
-    pub unk2: u32,
-    
-    #[br(pad_after = 4)]
-    #[binwrite(pad_after(0x4))]
-    pub total_samples: u32,
+    pub tone_name: Hash40,
+    pub nus3bank_id: u32,
+    pub tone_id: u32,
 }
 
 #[cfg(feature = "derive_serde")]
@@ -154,7 +150,7 @@ mod serde_hash40 {
 }
 
 
-impl BgmPropertyFile {
+impl SliFile {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         BufReader::new(File::open(path)?).read_le()
     }
@@ -168,16 +164,16 @@ impl BgmPropertyFile {
             .map_err(Into::into)
     }
 
-    pub fn new(entries: Vec<Entry>) -> Self {
-        BgmPropertyFile(entries)
+    pub fn new(version: u32, entries: Vec<Entry>) -> Self {
+        SliFile(version, entries)
     }
 
     pub fn entries(&self) -> &Vec<Entry> {
-        &self.0
+        &self.1
     }
 
     pub fn entries_mut(&mut self) -> &mut Vec<Entry> {
-        &mut self.0
+        &mut self.1
     }
 }
 
@@ -187,15 +183,15 @@ mod tests {
 
     #[test]
     fn test_round_trip() {
-        let original = std::fs::read("bgm_property.bin").unwrap();
-        let bgm_property = BgmPropertyFile::open("bgm_property.bin").unwrap();
+        let original = std::fs::read("soundlabelinfo.sli").unwrap();
+        let sound_label_info = SliFile::open("soundlabelinfo.sli").unwrap();
 
-        println!("{:#X?}", bgm_property);
+        // println!("{:#X?}", sound_label_info);
 
         let mut round_trip = Vec::new();
-        bgm_property.write(&mut round_trip).unwrap();
+        sound_label_info.write(&mut round_trip).unwrap();
 
         assert_eq!(original, round_trip);
-        //bgm_property.save("bgm_property_out.bin").unwrap();
+        //sound_label_info.save("sound_label_info_out.bin").unwrap();
     }
 }
